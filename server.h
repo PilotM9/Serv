@@ -1,34 +1,39 @@
 #ifndef SERVER_H
 #define SERVER_H
 
-#include <QTcpServer>
-#include <QTcpSocket>
+#include <QObject>
+#include <QUdpSocket>
 #include <QQueue>
+#include <QTimer>
 
-class Server : public QTcpServer
+class Server : public QObject
 {
     Q_OBJECT
 
 public:
-    explicit Server(QObject *parent = nullptr);
+    explicit Server(quint16 port,QObject *parent = nullptr);
     ~Server();
 
 private slots:
-    void onNewConnection();
     void onReadyRead();
-    void onDisconnected();
     void processTick();
-    void startProcessingRequests();
 
 private:
-    QTcpSocket *clientSocket;
-    bool busy;  // Флаг, указывающий, занят ли сервер
-    QQueue<QString> requestQueue;  // Очередь заявок
-
-    bool processRequest(const QByteArray &data, QString &response);
+    void startProcessing();
+    void stopProcessing();
+    void writeDatagram(const QByteArray &data, const QHostAddress &address, quint16 port);
+    void sendJsonRpcResponse(const QJsonObject &response, const QHostAddress &address, quint16 port);
+    bool processRequest(const QJsonObject &request, QJsonObject &response);
     bool validateConfiguration(const QString &configuration);
     bool validatePriority(const QString &priority);
-    void sendRequest(const QString &request);
+
+    QUdpSocket *socket;
+    QTimer *tickTimer;
+    QQueue<QJsonObject> requestQueue;
+    bool hasRequests;
+    bool busy;
+    QHostAddress senderAddress;
+    quint16 senderPort;
 };
 
 #endif // SERVER_H

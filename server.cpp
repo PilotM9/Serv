@@ -1,153 +1,160 @@
-#include "Server.h"
+#include "server.h"
 #include <QDebug>
-#include <QStringList>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QHostAddress>
 
-Server::Server(QObject *parent)
-    : QTcpServer(parent), clientSocket(nullptr), busy(false)
+Server::Server(quint16 port, QObject *parent)
+    : QObject(parent)
+    , tickTimer(new QTimer(this))
+    , socket(new QUdpSocket(this))
+    , hasRequests(false)
+    , busy(false)
 {
-    connect(this, &QTcpServer::newConnection, this, &Server::onNewConnection);
+    connect(tickTimer, &QTimer::timeout, this, &Server::processTick);
 
-    if (!listen(QHostAddress::Any, 1234)) {
+    if (!socket->bind(QHostAddress::Any, port)) {
         qDebug() << "Server could not start!";
     } else {
         qDebug() << "Server started!";
+        connect(socket, &QUdpSocket::readyRead, this, &Server::onReadyRead);
     }
 }
 
 Server::~Server()
 {
-    if (clientSocket) {
-        clientSocket->disconnectFromHost();
-        clientSocket->deleteLater();
-    }
-}
-
-void Server::onNewConnection()
-{
-    if (clientSocket) {
-        qDebug() << "Disconnecting old client";
-        clientSocket->disconnectFromHost();
-        clientSocket->deleteLater();
-    }
-
-    clientSocket = nextPendingConnection();
-    connect(clientSocket, &QTcpSocket::readyRead, this, &Server::onReadyRead);
-    connect(clientSocket, &QTcpSocket::disconnected, this, &Server::onDisconnected);
-    qDebug() << "Client connected";
+    tickTimer->stop();
+    socket->close();
 }
 
 void Server::onReadyRead()
 {
-    if (clientSocket) {
-        QByteArray data = clientSocket->readAll();
+    while (socket->hasPendingDatagrams()) {
+        QByteArray data;
+        data.resize(socket->pendingDatagramSize());
+        QHostAddress senderAddress;
+        quint16 senderPort;
+        socket->readDatagram(data.data(), data.size(), &senderAddress, &senderPort);
 
-        if (data == "TICK") {
-            processTick();
-        } else if (data == "START_PROCESSING") {
-            startProcessingRequests();
-        } else if (data == "BUSY") {
-            busy = true;
-            clientSocket->write("Server is busy");
-            clientSocket->flush();
-        } else if (data == "AVAILABLE") {
-            busy = false;
-            clientSocket->write("Server is available");
-            clientSocket->flush();
-        } else {
-            if (busy) {
-                // Если сервер занят, не принимаем заявки
-                clientSocket->write("Server is busy, cannot process request");
-                clientSocket->flush();
-            } else {
-                QString response;
-                if (processRequest(data, response)) {
-                    clientSocket->write(response.toUtf8());
-                } else {
-                    clientSocket->write("Invalid request");
-                }
-                clientSocket->flush();
-            }
+        qDebug() << "Data received:" << data;
+
+        QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
+        if (jsonDoc.isNull() || !jsonDoc.isObject()) {
+            qDebug() << "Received invalid JSON";
+            return;
         }
-    } else {
-        qDebug() << "clientSocket is nullptr in onReadyRead()!";
-    }
-}
 
+        QJsonObject jsonRequest = jsonDoc.object();
+        QString method = jsonRequest["method"].toString();
+        QString id = jsonRequest["id"].toString();
 
+        qDebug() << "Method received:" << method;
 
-void Server::onDisconnected()
-{
-    qDebug() << "Client disconnected";
-    if (clientSocket) {
-        clientSocket->deleteLater();
-        clientSocket = nullptr;
+        QJsonObject jsonResponse;
+        jsonResponse["jsonrpc"] = "2.0";
+        jsonResponse["id"] = id;
+
+        if (method == "startProcessing") {
+            startProcessing();
+            jsonResponse["result"] = "Started processing requests";
+        } else if (method == "stopProcessing") {
+            stopProcessing();
+            jsonResponse["result"] = "Stopped processing requests";
+        } else if (method == "setBusy" || method == "setAvailable") {
+            QString responseMessage = (method == "setBusy") ? "Server is busy" : "Server is available";
+            jsonResponse["result"] = responseMessage;
+        } else if (method == "processRequest") {
+            QJsonObject params = jsonRequest["params"].toObject();
+            if (processRequest(params, jsonResponse)) {
+                requestQueue.enqueue(params);
+                this->senderAddress = senderAddress;
+                this->senderPort = senderPort;
+                if (!hasRequests) {
+                    hasRequests = true;
+                    tickTimer->start(256);
+                }
+            } else {
+                jsonResponse["result"] = "Invalid request";
+                sendJsonRpcResponse(jsonResponse, senderAddress, senderPort);
+            }
+        } else {
+            jsonResponse["error"] = "Unknown method";
+            sendJsonRpcResponse(jsonResponse, senderAddress, senderPort);
+        }
     }
 }
 
 void Server::processTick()
 {
-    if (!busy) {
-        // Сервер не занят, готов к обработке
-        clientSocket->write("ACCEPTED");
-        clientSocket->flush();
-        busy = true; // Устанавливаем флаг, что сервер занят
-    } else {
-        clientSocket->write("BUSY");
-        clientSocket->flush();
-    }
-}
+    if (!busy && !requestQueue.isEmpty()) {
+        QJsonObject request = requestQueue.dequeue();
+        QJsonObject response;
+        busy = true; // Set busy before processing
+        if (processRequest(request, response)) {
+            response["result"] = "Accepted: ID " + request["id"].toString();
+        } else {
+            response["result"] = "Invalid request";
+        }
+        response["id"] = request["id"];
+        sendJsonRpcResponse(response, senderAddress, senderPort);
+        busy = false;
 
-
-void Server::startProcessingRequests()
-{
-    if (!requestQueue.isEmpty() && !busy) {
-        // Запускаем обработку первой заявки в очереди
-        QString request = requestQueue.dequeue();
-        sendRequest(request);
-    }
-}
-
-void Server::sendRequest(const QString &request)
-{
-    // Логика для обработки заявки
-    QString response;
-    if (processRequest(request.toUtf8(), response)) {
-        clientSocket->write(response.toUtf8());
-    } else {
-        clientSocket->write("Invalid request");
-    }
-    clientSocket->flush();
-}
-
-bool Server::processRequest(const QByteArray &data, QString &response)
-{
-    QStringList parts = QString(data).split(';');
-
-    // Ожидаем, что parts[0] - это id, parts[1] - configuration, parts[2] - priority
-    if (parts.size() == 3) {
-        QString id = parts[0].trimmed();
-        QString configuration = parts[1].trimmed();
-        QString priority = parts[2].trimmed();
-
-        if (validateConfiguration(configuration) && validatePriority(priority)) {
-            response = QString("Accepted: ID %1").arg(id);
-            return true;
+        if (requestQueue.isEmpty()) {
+            tickTimer->stop();
+            hasRequests = false;
         }
     }
-
-    response = "Invalid request";
-    return false;
 }
 
+void Server::startProcessing()
+{
+    hasRequests = true;
+    tickTimer->start(256); // Start the timer with 128 ms interval
+    qDebug() << "Started processing requests";
+}
+
+void Server::stopProcessing()
+{
+    hasRequests = false;
+    tickTimer->stop(); // Stop the timer
+    qDebug() << "Stopped processing requests";
+}
+
+void Server::writeDatagram(const QByteArray &data, const QHostAddress &address, quint16 port)
+{
+    qDebug() << "Sending response:" << data;
+    socket->writeDatagram(data, address, port);
+}
+
+void Server::sendJsonRpcResponse(const QJsonObject &response, const QHostAddress &address, quint16 port)
+{
+    QJsonDocument jsonDoc(response);
+    QByteArray datagram = jsonDoc.toJson();
+    qDebug() << "Sending response:" << datagram;
+    writeDatagram(datagram, address, port);
+}
+
+bool Server::processRequest(const QJsonObject &request, QJsonObject &response)
+{
+    QString id = request["id"].toString();
+    QString configuration = request["configuration"].toString();
+    QString priority = request["priority"].toString();
+
+    if (validateConfiguration(configuration) && validatePriority(priority)) {
+        response["result"] = QString("Accepted: ID %1").arg(id);
+        return true;
+    }
+
+    response["result"] = "Invalid request";
+    return false;
+}
 
 bool Server::validateConfiguration(const QString &configuration)
 {
     QStringList validConfigurations = {
         "одна строка", "две строки", "три строки", "четыре строки",
         "один столбец", "два столбца", "три столбца", "четыре столбца",
-        "1х1", "1x2", "1x3",
-        "2x3", "2x2", "3x3",
-        "4х4", "8х8"
+        "1х1", "1x2", "1x3", "2x3", "2x2", "3x3", "4х4", "8х8"
     };
 
     return validConfigurations.contains(configuration);
