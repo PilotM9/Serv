@@ -1,12 +1,58 @@
-build/
+# Игнорировать временные и сборочные файлы
 *.o
-*.app
+*.obj
+*.so
+*.a
+*.lib
+*.dll
+*.dylib
+
+# Игнорировать папки сборки
 build/
-*.o
-*.app
-build/
-*.o
-*.app
-build/
-*.o
-*.app
+bin/
+out/
+Debug/
+Release/
+
+# Игнорировать файлы IDE
+*.pro.user
+*.qmake.stash
+*.qmake.cache
+*.user
+*.suo
+*.ncb
+*.sdf
+*.vcxproj*
+*.vcxproj.filters
+*.dbmdl
+*.pdb
+
+# Игнорировать файлы автогенерации
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+
+# Игнорировать файлы временного кэширования
+*.swp
+*.swo
+*.tmp
+
+# Игнорировать настройки системы
+.DS_Store
+Thumbs.db
+
+# Игнорировать системные файлы
+*.log
+*.pid
+*.gz
+*.zip
+*.tar
+*.7z
+
+# Игнорировать файлы версий
+*.bak
+*.orig
+*.rej
+*.tmp
+
