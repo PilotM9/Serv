@@ -3,37 +3,43 @@
 
 #include <QObject>
 #include <QUdpSocket>
-#include <QQueue>
 #include <QTimer>
+#include <QQueue>
+#include <QPair>
+#include <QJsonObject>
+#include <QHostAddress>
 
 class Server : public QObject
 {
     Q_OBJECT
-
 public:
-    explicit Server(quint16 port,QObject *parent = nullptr);
+    explicit Server(quint16 port, QObject *parent = nullptr);
     ~Server();
 
-private slots:
+public slots:
     void onReadyRead();
     void processTick();
-
-private:
     void startProcessing();
     void stopProcessing();
+    void broadcastCurrentTime();
+
+private:
     void writeDatagram(const QByteArray &data, const QHostAddress &address, quint16 port);
     void sendJsonRpcResponse(const QJsonObject &response, const QHostAddress &address, quint16 port);
     bool processRequest(const QJsonObject &request, QJsonObject &response);
     bool validateConfiguration(const QString &configuration);
     bool validatePriority(const QString &priority);
 
+private:
     QUdpSocket *socket;
     QTimer *tickTimer;
+    QTimer *timeBroadcastTimer;
     QQueue<QJsonObject> requestQueue;
-    bool hasRequests;
-    bool busy;
+    QQueue<QPair<QJsonObject, qint64>> delayedRequests; // Очередь для отложенных заявок
     QHostAddress senderAddress;
     quint16 senderPort;
+    bool hasRequests;
+    bool busy;
 };
 
 #endif // SERVER_H
