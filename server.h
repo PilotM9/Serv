@@ -40,6 +40,7 @@ private:
     quint16 senderPort;
     bool hasRequests;
     bool busy;
+    int requestCount;  // Счетчик заявок
 };
 
 #endif // SERVER_H

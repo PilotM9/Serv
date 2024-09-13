@@ -1191,6 +1191,12 @@ moc_server.cpp: server.h \
 		/opt/homebrew/lib/QtCore.framework/Headers/qtimer.h \
 		/opt/homebrew/lib/QtCore.framework/Headers/QQueue \
 		/opt/homebrew/lib/QtCore.framework/Headers/qqueue.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QPair \
+		/opt/homebrew/lib/QtCore.framework/Headers/qpair.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QJsonObject \
+		/opt/homebrew/lib/QtCore.framework/Headers/qjsonobject.h \
+		/opt/homebrew/lib/QtNetwork.framework/Headers/QHostAddress \
+		/opt/homebrew/lib/QtNetwork.framework/Headers/qhostaddress.h \
 		moc_predefs.h \
 		/opt/homebrew/share/qt/libexec/moc
 	/opt/homebrew/share/qt/libexec/moc $(DEFINES) --include /Volumes/BMP/DBSP/Projects/server/moc_predefs.h -I/opt/homebrew/share/qt/mkspecs/macx-clang -I/Volumes/BMP/DBSP/Projects/server -I/opt/homebrew/lib/QtGui.framework/Headers -I/opt/homebrew/lib/QtNetwork.framework/Headers -I/opt/homebrew/lib/QtCore.framework/Headers -I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1 -I/Library/Developer/CommandLineTools/usr/lib/clang/14.0.3/include -I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include -I/Library/Developer/CommandLineTools/usr/include -F/opt/homebrew/lib server.h -o moc_server.cpp
@@ -1221,7 +1227,13 @@ main.o: main.cpp /opt/homebrew/lib/QtCore.framework/Headers/QCoreApplication \
 		/opt/homebrew/lib/QtCore.framework/Headers/QTimer \
 		/opt/homebrew/lib/QtCore.framework/Headers/qtimer.h \
 		/opt/homebrew/lib/QtCore.framework/Headers/QQueue \
-		/opt/homebrew/lib/QtCore.framework/Headers/qqueue.h
+		/opt/homebrew/lib/QtCore.framework/Headers/qqueue.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QPair \
+		/opt/homebrew/lib/QtCore.framework/Headers/qpair.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QJsonObject \
+		/opt/homebrew/lib/QtCore.framework/Headers/qjsonobject.h \
+		/opt/homebrew/lib/QtNetwork.framework/Headers/QHostAddress \
+		/opt/homebrew/lib/QtNetwork.framework/Headers/qhostaddress.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o main.o main.cpp
 
 server.o: server.cpp server.h \
@@ -1233,12 +1245,18 @@ server.o: server.cpp server.h \
 		/opt/homebrew/lib/QtCore.framework/Headers/qtimer.h \
 		/opt/homebrew/lib/QtCore.framework/Headers/QQueue \
 		/opt/homebrew/lib/QtCore.framework/Headers/qqueue.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QPair \
+		/opt/homebrew/lib/QtCore.framework/Headers/qpair.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QJsonObject \
+		/opt/homebrew/lib/QtCore.framework/Headers/qjsonobject.h \
+		/opt/homebrew/lib/QtNetwork.framework/Headers/QHostAddress \
+		/opt/homebrew/lib/QtNetwork.framework/Headers/qhostaddress.h \
 		/opt/homebrew/lib/QtCore.framework/Headers/QDebug \
 		/opt/homebrew/lib/QtCore.framework/Headers/qdebug.h \
-		/opt/homebrew/lib/QtCore.framework/Headers/QStringList \
-		/opt/homebrew/lib/QtCore.framework/Headers/qstringlist.h \
-		/opt/homebrew/lib/QtNetwork.framework/Headers/QHostAddress \
-		/opt/homebrew/lib/QtNetwork.framework/Headers/qhostaddress.h
+		/opt/homebrew/lib/QtCore.framework/Headers/QJsonDocument \
+		/opt/homebrew/lib/QtCore.framework/Headers/qjsondocument.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QDateTime \
+		/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o server.o server.cpp
 
 moc_server.o: moc_server.cpp 

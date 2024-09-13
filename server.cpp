@@ -12,6 +12,7 @@ Server::Server(quint16 port, QObject *parent)
     , timeBroadcastTimer(new QTimer(this))
     , hasRequests(false)
     , busy(false)
+    , requestCount(0)  // Инициализация счетчика заявок
 {
     connect(tickTimer, &QTimer::timeout, this, &Server::processTick);
     connect(timeBroadcastTimer, &QTimer::timeout, this, &Server::broadcastCurrentTime);
@@ -70,12 +71,13 @@ void Server::onReadyRead()
             jsonResponse["result"] = responseMessage;
         } else if (method == "processRequest") {
             QJsonObject params = jsonRequest["params"].toObject();
-            qint64 requestTime = QDateTime::currentSecsSinceEpoch() + 3; // Задержка 3 такта
-            QString uniqueId = QString::number(requestTime);
+            qint64 currentTick = QDateTime::currentSecsSinceEpoch();
+            QString uniqueId = QString::number(currentTick + (++requestCount));
+
             params["uniqueId"] = uniqueId;
 
             // Заявки добавляются в очередь с указанным временем обработки
-            delayedRequests.enqueue(qMakePair(params, requestTime));
+            delayedRequests.enqueue(qMakePair(params, currentTick));
             this->senderAddress = senderAddress;
             this->senderPort = senderPort;
             if (!hasRequests) {
@@ -94,28 +96,48 @@ void Server::onReadyRead()
 
 void Server::processTick()
 {
+    // Проверяем, если сервер занят, выходим из функции
+    if (busy) {
+        return;
+    }
+
     qint64 currentTime = QDateTime::currentSecsSinceEpoch();
 
     // Обработка задержанных заявок
     while (!delayedRequests.isEmpty() && delayedRequests.head().second <= currentTime) {
         QPair<QJsonObject, qint64> requestPair = delayedRequests.dequeue();
         QJsonObject request = requestPair.first;
-        qint64 requestTime = requestPair.second;
 
-        qDebug() << "Processing request with ID:" << request["uniqueId"].toString() << "scheduled for:" << requestTime;
+        QString uniqueId = request["uniqueId"].toString();
+
+        qDebug() << "Processing request with ID:" << uniqueId;
+
+        // Устанавливаем флаг занятости перед обработкой
+        busy = true;
 
         QJsonObject response;
-        busy = true; // Устанавливаем занятость перед обработкой
         if (validateConfiguration(request["configuration"].toString()) && validatePriority(request["priority"].toString())) {
-            response["result"] = "Accepted: ID " + request["uniqueId"].toString();
+            response["result"] = QString("Accepted: ID %1").arg(uniqueId);
+            response["requestBody"] = request;  // Добавляем тело заявки в ответ
         } else {
             response["result"] = "Invalid request";
+            response["requestBody"] = request;  // Все равно добавляем тело заявки для информации
         }
-        response["id"] = request["uniqueId"].toString();
+        response["id"] = uniqueId;
         sendJsonRpcResponse(response, senderAddress, senderPort);
+
+        // Лог завершения обработки
+        qDebug() << "Request with ID:" << uniqueId << " has been processed";
+        qDebug() << "Request body:" << request;  // Лог тела заявки
+
+        // Убираем флаг занятости после завершения обработки
         busy = false;
 
-        qDebug() << "Request with ID:" << request["uniqueId"].toString() << "has been processed"; // Лог завершения обработки
+        // Уменьшаем счетчик заявок после обработки
+        --requestCount;
+
+        // Прерываем цикл, чтобы обработать только одну заявку за тик
+        break;
     }
 
     // Остановка обработки, если нет заявок
@@ -125,9 +147,6 @@ void Server::processTick()
         qDebug() << "No more requests to process. Stopping tick timer.";
     }
 }
-
-
-
 
 
 void Server::startProcessing()
@@ -156,21 +175,6 @@ void Server::sendJsonRpcResponse(const QJsonObject &response, const QHostAddress
     QByteArray datagram = jsonDoc.toJson();
     qDebug() << "Sending response:" << datagram;
     writeDatagram(datagram, address, port);
-}
-
-bool Server::processRequest(const QJsonObject &request, QJsonObject &response)
-{
-    QString id = request["id"].toString();
-    QString configuration = request["configuration"].toString();
-    QString priority = request["priority"].toString();
-    qDebug()<<"Validating request\n";
-    if (validateConfiguration(configuration) && validatePriority(priority)) {
-        response["result"] = QString("Accepted: ID %1").arg(id);
-        return true;
-    }
-
-    response["result"] = "Invalid request";
-    return false;
 }
 
 bool Server::validateConfiguration(const QString &configuration)
