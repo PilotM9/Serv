@@ -1,4 +1,5 @@
 #include "server.h"
+#include "time_thread.h"
 #include <QDebug>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -8,28 +9,26 @@
 Server::Server(quint16 port, QObject *parent)
     : QObject(parent)
     , socket(new QUdpSocket(this))
-    , tickTimer(new QTimer(this))
-    , timeBroadcastTimer(new QTimer(this))
+    , timeThread(new TimeThread(this))
     , hasRequests(false)
     , busy(false)
     , requestCount(0)  // Инициализация счетчика заявок
 {
-    connect(tickTimer, &QTimer::timeout, this, &Server::processTick);
-    connect(timeBroadcastTimer, &QTimer::timeout, this, &Server::broadcastCurrentTime);
+    connect(timeThread, &TimeThread::tick, this, &Server::processTick);
 
     if (!socket->bind(QHostAddress::Any, port)) {
         qDebug() << "Server could not start!";
     } else {
         qDebug() << "Server started!";
         connect(socket, &QUdpSocket::readyRead, this, &Server::onReadyRead);
-        timeBroadcastTimer->start(1000); // Запуск таймера для тиканья каждую секунду
+        timeThread->start();  // Запуск отдельного потока для управления временем
     }
 }
 
 Server::~Server()
 {
-    tickTimer->stop();
-    timeBroadcastTimer->stop();
+    timeThread->stop();  // Остановка потока перед удалением
+    timeThread->wait();  // Ожидание завершения потока
     socket->close();
 }
 
@@ -52,40 +51,27 @@ void Server::onReadyRead()
 
         QJsonObject jsonRequest = jsonDoc.object();
         QString method = jsonRequest["method"].toString();
-        QString id = jsonRequest["id"].toString();
+        QString id = jsonRequest["id"].toString();  // Получаем ID
 
         qDebug() << "Method received:" << method;
+        qDebug() << "Request ID received:" << id;  // Выводим ID для проверки
 
         QJsonObject jsonResponse;
         jsonResponse["jsonrpc"] = "2.0";
-        jsonResponse["id"] = id;
+        jsonResponse["id"] = id;  // Вставляем ID в ответ
 
-        if (method == "startProcessing") {
-            startProcessing();
-            jsonResponse["result"] = "Started processing requests";
-        } else if (method == "stopProcessing") {
-            stopProcessing();
-            jsonResponse["result"] = "Stopped processing requests";
-        } else if (method == "setBusy" || method == "setAvailable") {
-            QString responseMessage = (method == "setBusy") ? "Server is busy" : "Server is available";
-            jsonResponse["result"] = responseMessage;
-        } else if (method == "processRequest") {
+        if (method == "processRequest") {
             QJsonObject params = jsonRequest["params"].toObject();
-            qint64 currentTick = QDateTime::currentSecsSinceEpoch();
-            QString uniqueId = QString::number(currentTick + (++requestCount));
 
-            params["uniqueId"] = uniqueId;
+            // Сохраняем информацию о клиенте и его запросе, включая ID
+            ClientInfo clientInfo = {senderAddress, senderPort};
+            delayedRequests.enqueue(qMakePair(params, clientInfo));
 
-            // Заявки добавляются в очередь с указанным временем обработки
-            delayedRequests.enqueue(qMakePair(params, currentTick));
-            this->senderAddress = senderAddress;
-            this->senderPort = senderPort;
             if (!hasRequests) {
                 hasRequests = true;
-                tickTimer->start(1000); // Запуск таймера с интервалом в 1 секунду
             }
 
-            jsonResponse["result"] = QString("Request will be processed with ID: %1").arg(uniqueId);
+            jsonResponse["result"] = QString("Request will be processed with ID: %1").arg(id);
             sendJsonRpcResponse(jsonResponse, senderAddress, senderPort);
         } else {
             jsonResponse["error"] = "Unknown method";
@@ -94,72 +80,19 @@ void Server::onReadyRead()
     }
 }
 
-void Server::processTick()
-{
-    // Проверяем, если сервер занят, выходим из функции
-    if (busy) {
-        return;
-    }
 
-    qint64 currentTime = QDateTime::currentSecsSinceEpoch();
 
-    // Обработка задержанных заявок
-    while (!delayedRequests.isEmpty() && delayedRequests.head().second <= currentTime) {
-        QPair<QJsonObject, qint64> requestPair = delayedRequests.dequeue();
-        QJsonObject request = requestPair.first;
-
-        QString uniqueId = request["uniqueId"].toString();
-
-        qDebug() << "Processing request with ID:" << uniqueId;
-
-        // Устанавливаем флаг занятости перед обработкой
-        busy = true;
-
-        QJsonObject response;
-        if (validateConfiguration(request["configuration"].toString()) && validatePriority(request["priority"].toString())) {
-            response["result"] = QString("Accepted: ID %1").arg(uniqueId);
-            response["requestBody"] = request;  // Добавляем тело заявки в ответ
-        } else {
-            response["result"] = "Invalid request";
-            response["requestBody"] = request;  // Все равно добавляем тело заявки для информации
-        }
-        response["id"] = uniqueId;
-        sendJsonRpcResponse(response, senderAddress, senderPort);
-
-        // Лог завершения обработки
-        qDebug() << "Request with ID:" << uniqueId << " has been processed";
-        qDebug() << "Request body:" << request;  // Лог тела заявки
-
-        // Убираем флаг занятости после завершения обработки
-        busy = false;
-
-        // Уменьшаем счетчик заявок после обработки
-        --requestCount;
-
-        // Прерываем цикл, чтобы обработать только одну заявку за тик
-        break;
-    }
-
-    // Остановка обработки, если нет заявок
-    if (delayedRequests.isEmpty()) {
-        tickTimer->stop();
-        hasRequests = false;
-        qDebug() << "No more requests to process. Stopping tick timer.";
-    }
-}
 
 
 void Server::startProcessing()
 {
     hasRequests = true;
-    tickTimer->start(1000); // Запуск таймера с интервалом в 1 секунду
     qDebug() << "Started processing requests";
 }
 
 void Server::stopProcessing()
 {
     hasRequests = false;
-    tickTimer->stop(); // Остановка таймера
     qDebug() << "Stopped processing requests";
 }
 
@@ -193,11 +126,4 @@ bool Server::validatePriority(const QString &priority)
     bool ok;
     int p = priority.toInt(&ok);
     return ok && p >= 1 && p <= 7;
-}
-
-void Server::broadcastCurrentTime()
-{
-    qint64 unixTime = QDateTime::currentSecsSinceEpoch();
-
-    qDebug() << "Current tick:" << unixTime;
 }

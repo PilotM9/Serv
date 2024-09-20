@@ -53,10 +53,14 @@ OBJECTS_DIR   = ./
 ####### Files
 
 SOURCES       = main.cpp \
-		server.cpp moc_server.cpp
+		server.cpp \
+		time_thread.cpp moc_server.cpp \
+		moc_time_thread.cpp
 OBJECTS       = main.o \
 		server.o \
-		moc_server.o
+		time_thread.o \
+		moc_server.o \
+		moc_time_thread.o
 DIST          = /opt/homebrew/share/qt/mkspecs/features/spec_pre.prf \
 		/opt/homebrew/share/qt/mkspecs/features/device_config.prf \
 		/opt/homebrew/Cellar/qt/6.7.0_1/share/qt/mkspecs/common/unix.conf \
@@ -399,8 +403,10 @@ DIST          = /opt/homebrew/share/qt/mkspecs/features/spec_pre.prf \
 		/opt/homebrew/share/qt/mkspecs/features/exceptions.prf \
 		/opt/homebrew/share/qt/mkspecs/features/yacc.prf \
 		/opt/homebrew/share/qt/mkspecs/features/lex.prf \
-		server.pro server.h main.cpp \
-		server.cpp
+		server.pro server.h \
+		time_thread.h main.cpp \
+		server.cpp \
+		time_thread.cpp
 QMAKE_TARGET  = server
 DESTDIR       = 
 TARGET        = server.app/Contents/MacOS/server
@@ -1143,8 +1149,8 @@ distdir: FORCE
 	@test -d $(DISTDIR) || mkdir -p $(DISTDIR)
 	$(COPY_FILE) --parents $(DIST) $(DISTDIR)/
 	$(COPY_FILE) --parents /opt/homebrew/share/qt/mkspecs/features/data/dummy.cpp $(DISTDIR)/
-	$(COPY_FILE) --parents server.h $(DISTDIR)/
-	$(COPY_FILE) --parents main.cpp server.cpp $(DISTDIR)/
+	$(COPY_FILE) --parents server.h time_thread.h $(DISTDIR)/
+	$(COPY_FILE) --parents main.cpp server.cpp time_thread.cpp $(DISTDIR)/
 
 
 clean: compiler_clean 
@@ -1179,9 +1185,9 @@ compiler_moc_predefs_clean:
 moc_predefs.h: /opt/homebrew/share/qt/mkspecs/features/data/dummy.cpp
 	/Library/Developer/CommandLineTools/usr/bin/clang++ -pipe -stdlib=libc++ -O2 -std=gnu++1z $(EXPORT_ARCH_ARGS) -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -mmacosx-version-min=13.0 -Wall -Wextra -dM -E -o moc_predefs.h /opt/homebrew/share/qt/mkspecs/features/data/dummy.cpp
 
-compiler_moc_header_make_all: moc_server.cpp
+compiler_moc_header_make_all: moc_server.cpp moc_time_thread.cpp
 compiler_moc_header_clean:
-	-$(DEL_FILE) moc_server.cpp
+	-$(DEL_FILE) moc_server.cpp moc_time_thread.cpp
 moc_server.cpp: server.h \
 		/opt/homebrew/lib/QtCore.framework/Headers/QObject \
 		/opt/homebrew/lib/QtCore.framework/Headers/qobject.h \
@@ -1195,11 +1201,27 @@ moc_server.cpp: server.h \
 		/opt/homebrew/lib/QtCore.framework/Headers/qpair.h \
 		/opt/homebrew/lib/QtCore.framework/Headers/QJsonObject \
 		/opt/homebrew/lib/QtCore.framework/Headers/qjsonobject.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QJsonDocument \
+		/opt/homebrew/lib/QtCore.framework/Headers/qjsondocument.h \
 		/opt/homebrew/lib/QtNetwork.framework/Headers/QHostAddress \
 		/opt/homebrew/lib/QtNetwork.framework/Headers/qhostaddress.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QDateTime \
+		/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h \
+		time_thread.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QThread \
+		/opt/homebrew/lib/QtCore.framework/Headers/qthread.h \
 		moc_predefs.h \
 		/opt/homebrew/share/qt/libexec/moc
 	/opt/homebrew/share/qt/libexec/moc $(DEFINES) --include /Volumes/BMP/DBSP/Projects/server/moc_predefs.h -I/opt/homebrew/share/qt/mkspecs/macx-clang -I/Volumes/BMP/DBSP/Projects/server -I/opt/homebrew/lib/QtGui.framework/Headers -I/opt/homebrew/lib/QtNetwork.framework/Headers -I/opt/homebrew/lib/QtCore.framework/Headers -I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1 -I/Library/Developer/CommandLineTools/usr/lib/clang/14.0.3/include -I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include -I/Library/Developer/CommandLineTools/usr/include -F/opt/homebrew/lib server.h -o moc_server.cpp
+
+moc_time_thread.cpp: time_thread.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QThread \
+		/opt/homebrew/lib/QtCore.framework/Headers/qthread.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QDateTime \
+		/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h \
+		moc_predefs.h \
+		/opt/homebrew/share/qt/libexec/moc
+	/opt/homebrew/share/qt/libexec/moc $(DEFINES) --include /Volumes/BMP/DBSP/Projects/server/moc_predefs.h -I/opt/homebrew/share/qt/mkspecs/macx-clang -I/Volumes/BMP/DBSP/Projects/server -I/opt/homebrew/lib/QtGui.framework/Headers -I/opt/homebrew/lib/QtNetwork.framework/Headers -I/opt/homebrew/lib/QtCore.framework/Headers -I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1 -I/Library/Developer/CommandLineTools/usr/lib/clang/14.0.3/include -I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include -I/Library/Developer/CommandLineTools/usr/include -F/opt/homebrew/lib time_thread.h -o moc_time_thread.cpp
 
 compiler_moc_objc_header_make_all:
 compiler_moc_objc_header_clean:
@@ -1232,8 +1254,15 @@ main.o: main.cpp /opt/homebrew/lib/QtCore.framework/Headers/QCoreApplication \
 		/opt/homebrew/lib/QtCore.framework/Headers/qpair.h \
 		/opt/homebrew/lib/QtCore.framework/Headers/QJsonObject \
 		/opt/homebrew/lib/QtCore.framework/Headers/qjsonobject.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QJsonDocument \
+		/opt/homebrew/lib/QtCore.framework/Headers/qjsondocument.h \
 		/opt/homebrew/lib/QtNetwork.framework/Headers/QHostAddress \
-		/opt/homebrew/lib/QtNetwork.framework/Headers/qhostaddress.h
+		/opt/homebrew/lib/QtNetwork.framework/Headers/qhostaddress.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QDateTime \
+		/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h \
+		time_thread.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QThread \
+		/opt/homebrew/lib/QtCore.framework/Headers/qthread.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o main.o main.cpp
 
 server.o: server.cpp server.h \
@@ -1249,18 +1278,31 @@ server.o: server.cpp server.h \
 		/opt/homebrew/lib/QtCore.framework/Headers/qpair.h \
 		/opt/homebrew/lib/QtCore.framework/Headers/QJsonObject \
 		/opt/homebrew/lib/QtCore.framework/Headers/qjsonobject.h \
-		/opt/homebrew/lib/QtNetwork.framework/Headers/QHostAddress \
-		/opt/homebrew/lib/QtNetwork.framework/Headers/qhostaddress.h \
-		/opt/homebrew/lib/QtCore.framework/Headers/QDebug \
-		/opt/homebrew/lib/QtCore.framework/Headers/qdebug.h \
 		/opt/homebrew/lib/QtCore.framework/Headers/QJsonDocument \
 		/opt/homebrew/lib/QtCore.framework/Headers/qjsondocument.h \
+		/opt/homebrew/lib/QtNetwork.framework/Headers/QHostAddress \
+		/opt/homebrew/lib/QtNetwork.framework/Headers/qhostaddress.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QDateTime \
+		/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h \
+		time_thread.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QThread \
+		/opt/homebrew/lib/QtCore.framework/Headers/qthread.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QDebug \
+		/opt/homebrew/lib/QtCore.framework/Headers/qdebug.h
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o server.o server.cpp
+
+time_thread.o: time_thread.cpp time_thread.h \
+		/opt/homebrew/lib/QtCore.framework/Headers/QThread \
+		/opt/homebrew/lib/QtCore.framework/Headers/qthread.h \
 		/opt/homebrew/lib/QtCore.framework/Headers/QDateTime \
 		/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h
-	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o server.o server.cpp
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o time_thread.o time_thread.cpp
 
 moc_server.o: moc_server.cpp 
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o moc_server.o moc_server.cpp
+
+moc_time_thread.o: moc_time_thread.cpp 
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o moc_time_thread.o moc_time_thread.cpp
 
 ####### Install
 

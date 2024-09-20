@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
     quint16 port = 0;
 
     while (port == 0) {
-        std::cout << "Enter a port number (1-65535): ";
+        std::cout << "Enter a port number (49152-65535): ";
         std::string input;
         std::cin >> input;
 
@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
 
         try {
             int enteredPort = std::stoi(input);
-            if (enteredPort > 0 && enteredPort <= 65535) {
+            if (enteredPort > 49152 && enteredPort <= 65535) {
                 port = static_cast<quint16>(enteredPort);
             } else {
                 std::cerr << "Invalid port number. Please try again." << std::endl;
